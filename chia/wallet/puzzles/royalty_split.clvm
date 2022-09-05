@@ -1,0 +1,40 @@
+(mod (PAYOUT_SCHEME my_amount)
+
+  (defconstant TEN_THOUSAND 10000)
+
+  (include condition_codes.clvm)
+  (include curry-and-treehash.clinc)
+
+  (defun-inline calculate_percentage (amount percentage)
+      (f (divmod (* amount percentage) TEN_THOUSAND))
+  )
+
+  (defun-inline get_amount (payout_scheme_item my_amount)
+      (calculate_percentage my_amount (f (r payout_scheme_item)))
+  )
+
+  (defun-inline get_puzhash (payout_scheme_item)
+      (f payout_scheme_item)
+  )
+
+   ; Loop through the royalty payout scheme and create coins
+  (defun split_amount_and_create_coins (PAYOUT_SCHEME my_amount)
+      (if PAYOUT_SCHEME
+          (c
+              (list
+                CREATE_COIN
+                (get_puzhash (f PAYOUT_SCHEME))
+                (get_amount (f PAYOUT_SCHEME) my_amount)
+              )
+              (split_amount_and_create_coins (r PAYOUT_SCHEME) my_amount)
+          )
+          ()
+      )
+  )
+
+  ; main
+  (c
+    (list ASSERT_MY_AMOUNT my_amount)
+    (split_amount_and_create_coins PAYOUT_SCHEME my_amount)
+  )
+)
