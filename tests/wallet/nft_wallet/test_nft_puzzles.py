@@ -5,6 +5,9 @@ from clvm.casts import int_from_bytes
 
 from chia.types.blockchain_format.program import Program
 from chia.types.blockchain_format.sized_bytes import bytes32
+from chia.types.condition_opcodes import ConditionOpcode
+from chia.util.condition_tools import conditions_dict_for_solution
+from chia.util.ints import uint64
 from chia.wallet.nft_wallet import uncurry_nft
 from chia.wallet.nft_wallet.nft_puzzles import (
     construct_ownership_layer,
@@ -16,6 +19,7 @@ from chia.wallet.outer_puzzles import match_puzzle
 from chia.wallet.puzzles.load_clvm import load_clvm
 from chia.wallet.puzzles.p2_delegated_puzzle_or_hidden_puzzle import puzzle_for_pk, solution_for_conditions
 from chia.wallet.uncurried_puzzle import uncurry_puzzle
+from tests.clvm.test_puzzles import MAX_BLOCK_COST_CLVM
 from tests.core.make_block_generator import int_to_public_key
 
 SINGLETON_MOD = load_clvm("singleton_top_layer_v1_1.clvm")
@@ -28,6 +32,7 @@ LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 NFT_STATE_LAYER_MOD_HASH = NFT_STATE_LAYER_MOD.get_tree_hash()
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
 OFFER_MOD = load_clvm("settlement_payments.clvm")
+ROYALTY_SPLIT_MOD = load_clvm("royalty_split.clvm")
 
 LAUNCHER_ID = Program.to(b"launcher-id").get_tree_hash()
 NFT_METADATA_UPDATER_DEFAULT = load_clvm("nft_metadata_updater_default.clvm")
@@ -194,3 +199,36 @@ def test_transfer_puzzle_builder() -> None:
         Program.to(metadata), NFT_METADATA_UPDATER_DEFAULT.get_tree_hash(), ol_puzzle
     )
     assert clvm_puzzle_hash == nft_puzzle.get_tree_hash()
+
+
+def test_royalty_split():
+    recipient_1_pk = int_to_public_key(111)
+    recipient_1_puz = puzzle_for_pk(recipient_1_pk)
+    recipient_1_ph = recipient_1_puz.get_tree_hash()
+
+    recipient_2_pk = int_to_public_key(222)
+    recipient_2_puz = puzzle_for_pk(recipient_2_pk)
+    recipient_2_ph = recipient_2_puz.get_tree_hash()
+
+    recipient_3_pk = int_to_public_key(333)
+    recipient_3_puz = puzzle_for_pk(recipient_3_pk)
+    recipient_3_ph = recipient_3_puz.get_tree_hash()
+
+    payout_scheme = Program.to(
+        [[recipient_1_ph, 8000], [recipient_2_ph, 1900], [recipient_3_ph, 100]]
+    )
+    royalty_split_puzzle = ROYALTY_SPLIT_MOD.curry(payout_scheme)
+
+    coin_amount = 1000
+    err, conds, _ = conditions_dict_for_solution(
+        royalty_split_puzzle, Program.to([coin_amount]), MAX_BLOCK_COST_CLVM
+    )
+
+    create_coin_conditions = conds.get(ConditionOpcode.CREATE_COIN)
+    assert len(create_coin_conditions) == len(payout_scheme.as_python())
+
+    for index, (puzhash, amount) in enumerate(payout_scheme.as_python()):
+        assert create_coin_conditions[index].vars[0] == puzhash
+        assert int_from_bytes(create_coin_conditions[index].vars[1]) == uint64(
+            coin_amount * int_from_bytes(amount) / 10000
+        )

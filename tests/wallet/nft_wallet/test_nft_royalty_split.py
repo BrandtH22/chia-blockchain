@@ -7,7 +7,6 @@ import pytest
 from blspy import G2Element
 
 from chia.consensus.block_rewards import calculate_base_farmer_reward, calculate_pool_reward
-from chia.full_node.mempool_manager import MempoolManager
 from chia.rpc.wallet_rpc_api import WalletRpcApi
 from chia.simulator.full_node_simulator import FullNodeSimulator
 from chia.simulator.simulator_protocol import FarmNewBlockProtocol
